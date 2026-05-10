@@ -1,0 +1,497 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Aplikasi Web Konverter QRIS Static ke Dinamis untuk Toko Offline">
+    <title>Sistem Kasir QRIS Dinamis</title>
+    
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome untuk Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- jsQR untuk membaca QR dari gambar -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+    <!-- qrcode.js untuk generate QR code baru -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <style>
+        /* Animasi kustom ringan */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .slide-up { animation: slideUp 0.4s ease-out; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hilangkan highlight biru di mobile saat tap */
+        button { -webkit-tap-highlight-color: transparent; }
+        
+        /* Efek klik untuk keypad */
+        .keypad-btn {
+            background: white;
+            transition: all 0.1s;
+        }
+        .keypad-btn:active {
+            background: #e5e7eb;
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-slate-800 font-sans h-screen w-screen overflow-hidden select-none">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-semibold transition-all duration-300 z-50 opacity-0 pointer-events-none shadow-lg mt-[-20px]">
+        Notifikasi
+    </div>
+
+    <!-- HALAMAN 1: HOME (UPLOAD & INPUT NOMINAL) -->
+    <div id="home-screen" class="flex flex-col md:flex-row h-full w-full slide-up">
+        
+        <!-- Kolom Kiri: Upload & Preview QRIS -->
+        <div class="w-full md:w-5/12 bg-white flex flex-col p-6 shadow-[10px_0_15px_-3px_rgba(0,0,0,0.05)] z-10 h-[40%] md:h-full relative border-b md:border-b-0 md:border-r border-gray-100">
+            <h2 class="text-xl font-bold text-teal-600 mb-4 flex items-center gap-2">
+                <i class="fas fa-store"></i> Kasir Offline
+            </h2>
+            
+            <div class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50 relative overflow-hidden transition hover:bg-gray-100">
+                <!-- Input File Hidden -->
+                <input type="file" id="qris-upload" accept="image/png, image/jpeg, image/jpg" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20">
+                
+                <!-- State Kosong -->
+                <div id="upload-placeholder" class="flex flex-col items-center text-gray-400 p-6 text-center">
+                    <i class="fas fa-qrcode text-5xl mb-3"></i>
+                    <p class="font-medium text-gray-600">Upload QRIS Static</p>
+                    <p class="text-xs mt-1">Tap atau Drop file (JPG/PNG)</p>
+                </div>
+
+                <!-- State Preview Image -->
+                <img id="qris-preview" src="" alt="Preview QRIS" class="hidden absolute inset-0 w-full h-full object-contain p-4 z-10 pointer-events-none bg-white">
+                
+                <!-- Indikator Sukses Baca -->
+                <div id="qris-status" class="hidden absolute top-3 right-3 bg-green-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow z-10">
+                    <i class="fas fa-check-circle"></i> Data Terbaca
+                </div>
+            </div>
+            <p class="text-xs text-center text-gray-400 mt-4"><i class="fas fa-lock"></i> Standar EMVCo Payload</p>
+        </div>
+
+        <!-- Kolom Kanan: Keypad & Nominal -->
+        <div class="w-full md:w-7/12 bg-gray-100 flex flex-col justify-between p-4 md:p-8 h-[60%] md:h-full">
+            
+            <!-- Display Nominal -->
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mb-6 flex flex-col items-end justify-center min-h-[120px]">
+                <p class="text-gray-400 font-semibold mb-1 w-full text-left text-sm uppercase tracking-wider">Total Tagihan</p>
+                <div class="flex items-baseline gap-2 overflow-hidden w-full justify-end">
+                    <span class="text-3xl text-gray-400 font-bold">Rp</span>
+                    <span id="nominal-display" class="text-5xl md:text-6xl font-extrabold text-slate-800 tracking-tight truncate">0</span>
+                </div>
+            </div>
+
+            <!-- Keypad -->
+            <div class="grid grid-cols-3 gap-3 md:gap-4 flex-1">
+                <!-- Baris 1 -->
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('1')">1</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('2')">2</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('3')">3</button>
+                <!-- Baris 2 -->
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('4')">4</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('5')">5</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('6')">6</button>
+                <!-- Baris 3 -->
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('7')">7</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('8')">8</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('9')">9</button>
+                <!-- Baris 4 -->
+                <button class="keypad-btn rounded-2xl text-xl font-bold shadow-sm border border-gray-200 text-red-500" onclick="resetNominal()">C</button>
+                <button class="keypad-btn rounded-2xl text-2xl font-bold shadow-sm border border-gray-200" onclick="inputDigit('0')">0</button>
+                <button class="keypad-btn rounded-2xl text-xl font-bold shadow-sm border border-gray-200 text-gray-500" onclick="deleteDigit()"><i class="fas fa-backspace"></i></button>
+            </div>
+
+            <!-- Tombol Aksi -->
+            <button id="btn-generate" onclick="generateDynamicQRIS()" class="mt-6 w-full bg-teal-500 text-white text-xl font-bold py-5 rounded-2xl shadow-lg shadow-teal-200 transition opacity-50 cursor-not-allowed flex justify-center items-center gap-3">
+                Buat QRIS Dinamis <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- HALAMAN 2: DISPLAY QRIS DINAMIS -->
+    <div id="qr-screen" class="hidden flex-col h-full w-full bg-slate-800 text-white fade-in items-center justify-center p-6 text-center">
+        
+        <h2 class="text-2xl text-gray-300 font-medium mb-1">Scan untuk Membayar</h2>
+        <div class="text-4xl md:text-5xl font-bold text-white mb-8 flex items-center justify-center gap-2">
+            <span class="text-teal-400">Rp</span> <span id="final-nominal">0</span>
+        </div>
+
+        <!-- Frame QRIS -->
+        <div class="bg-white p-4 rounded-3xl shadow-2xl relative mb-8">
+            <div class="border-4 border-dashed border-teal-100 rounded-2xl p-4">
+                <div id="qrcode-container" class="w-[250px] h-[250px] md:w-[300px] md:h-[300px] flex items-center justify-center">
+                    <!-- QR Code akan di-generate di sini -->
+                </div>
+            </div>
+            <!-- Label Bawah -->
+            <div class="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-teal-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg border-2 border-white whitespace-nowrap">
+                QRIS DINAMIS
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-gray-300 mb-10 text-lg">
+            <i class="far fa-clock"></i> Berlaku hingga: <span id="countdown" class="font-bold text-white tracking-widest">05:00</span>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-4 w-full max-w-md">
+            <button onclick="backToHome()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-4 rounded-2xl font-bold transition">
+                Batal
+            </button>
+            <button onclick="simulateSuccess()" class="flex-1 bg-green-500 hover:bg-green-400 text-white py-4 rounded-2xl font-bold transition shadow-lg shadow-green-900">
+                <i class="fas fa-check-circle"></i> Simulasikan Sukses
+            </button>
+        </div>
+    </div>
+
+    <!-- HALAMAN 3: PEMBAYARAN SUKSES -->
+    <div id="success-screen" class="hidden flex-col h-full w-full bg-green-500 text-white fade-in items-center justify-center p-6 text-center">
+        <div class="w-24 h-24 bg-white text-green-500 rounded-full flex items-center justify-center text-5xl shadow-2xl mb-6 slide-up">
+            <i class="fas fa-check"></i>
+        </div>
+        <h1 class="text-4xl font-extrabold mb-2 slide-up" style="animation-delay: 0.1s;">Pembayaran Berhasil!</h1>
+        <p class="text-green-100 text-xl slide-up" style="animation-delay: 0.2s;">Terima kasih atas pembayaran Anda</p>
+        
+        <div class="bg-green-600 rounded-2xl p-6 mt-8 w-full max-w-sm slide-up" style="animation-delay: 0.3s;">
+            <p class="text-green-200 text-sm uppercase font-bold mb-1">Nominal Dibayar</p>
+            <p class="text-3xl font-bold text-white">Rp <span id="success-nominal">0</span></p>
+        </div>
+    </div>
+
+    <!-- SCRIPT JAVASCRIPT UTAMA -->
+    <script>
+        // --- VARIABEL STATE ---
+        let rawNominal = "";
+        let originalQrisPayload = "";
+        let countdownTimer = null;
+
+        // --- ELEMEN DOM ---
+        const domNominal = document.getElementById('nominal-display');
+        const btnGenerate = document.getElementById('btn-generate');
+        const fileInput = document.getElementById('qris-upload');
+        const qrisPreview = document.getElementById('qris-preview');
+        const uploadPlaceholder = document.getElementById('upload-placeholder');
+        const qrisStatus = document.getElementById('qris-status');
+        
+        // --- NOTIFIKASI (TOAST) ---
+        function showToast(message, type = 'error') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            if(type === 'error') {
+                toast.className = "fixed top-10 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-semibold transition-all duration-300 z-50 bg-red-500 shadow-lg mt-0 opacity-100";
+            } else {
+                toast.className = "fixed top-10 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-semibold transition-all duration-300 z-50 bg-teal-500 shadow-lg mt-0 opacity-100";
+            }
+            
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'mt-0');
+                toast.classList.add('opacity-0', 'mt-[-20px]');
+            }, 3000);
+        }
+
+        // --- LOGIKA KEYPAD ---
+        function formatRupiah(angka) {
+            if(!angka) return "0";
+            return parseInt(angka, 10).toLocaleString('id-ID');
+        }
+
+        function updateDisplay() {
+            domNominal.innerText = formatRupiah(rawNominal);
+            validateState();
+        }
+
+        function inputDigit(digit) {
+            if (rawNominal.length >= 10) {
+                showToast("Maksimal nominal tercapai");
+                return;
+            }
+            if (rawNominal === "" && digit === "0") return; // Cegah 0 di awal
+            rawNominal += digit;
+            updateDisplay();
+        }
+
+        function deleteDigit() {
+            rawNominal = rawNominal.slice(0, -1);
+            updateDisplay();
+        }
+
+        function resetNominal() {
+            rawNominal = "";
+            updateDisplay();
+        }
+
+        // --- LOGIKA UPLOAD & PEMBACA QR ---
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Baca file sebagai Data URL
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Tampilkan preview di UI
+                    qrisPreview.src = event.target.result;
+                    qrisPreview.classList.remove('hidden');
+                    uploadPlaceholder.classList.add('hidden');
+
+                    // Proses gambar ke jsQR
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+
+                    if (code) {
+                        originalQrisPayload = code.data;
+                        qrisStatus.classList.remove('hidden');
+                        showToast("QRIS berhasil terbaca!", "success");
+                        validateState();
+                    } else {
+                        originalQrisPayload = "";
+                        qrisStatus.classList.add('hidden');
+                        showToast("Gambar tidak memuat QR Code yang valid");
+                        validateState();
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- VALIDASI STATUS TOMBOL ---
+        function validateState() {
+            if (rawNominal !== "" && parseInt(rawNominal) > 0 && originalQrisPayload !== "") {
+                btnGenerate.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnGenerate.classList.add('hover:bg-teal-400', 'hover:-translate-y-1');
+                btnGenerate.disabled = false;
+            } else {
+                btnGenerate.classList.add('opacity-50', 'cursor-not-allowed');
+                btnGenerate.classList.remove('hover:bg-teal-400', 'hover:-translate-y-1');
+                btnGenerate.disabled = true;
+            }
+        }
+
+        // Validasi awal saat load
+        validateState();
+
+        // --- LOGIKA EMVCo QRIS (Static ke Dinamis) ---
+        
+        // CRC16-CCITT (Polynomial 0x1021, Initial 0xFFFF)
+        function calculateCRC16(str) {
+            let crc = 0xFFFF;
+            for (let c = 0; c < str.length; c++) {
+                crc ^= str.charCodeAt(c) << 8;
+                for (let i = 0; i < 8; i++) {
+                    if ((crc & 0x8000) !== 0) {
+                        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                    } else {
+                        crc = (crc << 1) & 0xFFFF;
+                    }
+                }
+            }
+            return crc.toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        function createDynamicQrisPayload(payload, amount) {
+            try {
+                // Hapus CRC lama (selalu 8 karakter terakhir: '6304' + 4 karakter CRC)
+                let payloadWithoutCrc = payload.slice(0, -8);
+                
+                // Parsing format Tag-Length-Value (TLV)
+                let index = 0;
+                let tags = [];
+
+                while (index < payloadWithoutCrc.length) {
+                    let id = payloadWithoutCrc.substring(index, index + 2);
+                    let lenStr = payloadWithoutCrc.substring(index + 2, index + 4);
+                    let len = parseInt(lenStr, 10);
+                    let val = payloadWithoutCrc.substring(index + 4, index + 4 + len);
+                    tags.push({ id, lenStr, len, val });
+                    index += 4 + len;
+                }
+
+                // 1. Ubah Point of Initiation Method (Tag 01)
+                // '11' = Static, '12' = Dynamic
+                let tag01 = tags.find(t => t.id === '01');
+                if (tag01) {
+                    tag01.val = '12';
+                }
+
+                // 2. Tambah/Ubah Transaction Amount (Tag 54)
+                let amtStr = amount.toString();
+                let amtLenStr = amtStr.length.toString().padStart(2, '0');
+                
+                let tag54 = tags.find(t => t.id === '54');
+                if (tag54) {
+                    tag54.val = amtStr;
+                    tag54.len = amtStr.length;
+                    tag54.lenStr = amtLenStr;
+                } else {
+                    // Jika Tag 54 belum ada, sisipkan
+                    tags.push({
+                        id: '54',
+                        lenStr: amtLenStr,
+                        len: amtStr.length,
+                        val: amtStr
+                    });
+                }
+
+                // Rekonstruksi Payload TLV
+                let newPayload = '';
+                tags.forEach(t => {
+                    newPayload += t.id + t.lenStr + t.val;
+                });
+
+                // Tambahkan Header CRC
+                newPayload += '6304';
+                
+                // Hitung Checksum CRC Baru
+                let crc = calculateCRC16(newPayload);
+                
+                return newPayload + crc;
+            } catch (err) {
+                console.error(err);
+                return null;
+            }
+        }
+
+        // --- GENERATE & TAMPILKAN QRIS DINAMIS ---
+        function generateDynamicQRIS() {
+            if (btnGenerate.disabled) return;
+
+            const dynamicPayload = createDynamicQrisPayload(originalQrisPayload, rawNominal);
+            
+            if (!dynamicPayload) {
+                showToast("Gagal mengonversi QRIS. Format tidak dikenali.");
+                return;
+            }
+
+            // Bersihkan container
+            const qrContainer = document.getElementById('qrcode-container');
+            qrContainer.innerHTML = '';
+
+            // Generate QR Code baru
+            new QRCode(qrContainer, {
+                text: dynamicPayload,
+                width: 300,
+                height: 300,
+                colorDark : "#0f172a", 
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+
+            // Update Tampilan Nominal
+            document.getElementById('final-nominal').innerText = formatRupiah(rawNominal);
+            document.getElementById('success-nominal').innerText = formatRupiah(rawNominal);
+
+            // Ganti Layar
+            document.getElementById('home-screen').classList.add('hidden');
+            document.getElementById('qr-screen').classList.remove('hidden');
+            document.getElementById('qr-screen').classList.add('flex');
+
+            startCountdown();
+        }
+
+        // --- TIMER HITUNG MUNDUR ---
+        function startCountdown() {
+            let timeLeft = 300; // 5 menit
+            const countdownEl = document.getElementById('countdown');
+            
+            clearInterval(countdownTimer);
+            
+            countdownTimer = setInterval(() => {
+                timeLeft--;
+                const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+                const s = (timeLeft % 60).toString().padStart(2, '0');
+                countdownEl.innerText = `${m}:${s}`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdownTimer);
+                    showToast("Sesi pembayaran kedaluwarsa.");
+                    backToHome();
+                }
+            }, 1000);
+        }
+
+        function backToHome() {
+            clearInterval(countdownTimer);
+            document.getElementById('qr-screen').classList.add('hidden');
+            document.getElementById('qr-screen').classList.remove('flex');
+            
+            document.getElementById('success-screen').classList.add('hidden');
+            document.getElementById('success-screen').classList.remove('flex');
+
+            document.getElementById('home-screen').classList.remove('hidden');
+            
+            resetNominal();
+        }
+
+        // --- SIMULASI SUKSES & SUARA KASIR ---
+        function playSuccessSound() {
+            // Sintesis suara menggunakan Web Audio API murni (tanpa file mp3 terpisah)
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if(!AudioContext) return;
+
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            osc.type = 'sine';
+            
+            // Nada melengking ala kasir
+            osc.frequency.setValueAtTime(800, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0, ctx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.5);
+        }
+
+        function simulateSuccess() {
+            clearInterval(countdownTimer);
+            playSuccessSound();
+
+            document.getElementById('qr-screen').classList.add('hidden');
+            document.getElementById('qr-screen').classList.remove('flex');
+
+            document.getElementById('success-screen').classList.remove('hidden');
+            document.getElementById('success-screen').classList.add('flex');
+
+            // Auto-kembali ke home setelah 3 detik
+            setTimeout(() => {
+                backToHome();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+
+
+```
